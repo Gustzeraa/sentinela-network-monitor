@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinela | Monitoramento TI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .card-status { transition: all 0.3s; }
+        .status-up { border-left: 5px solid #198754; }
+        .status-down { border-left: 5px solid #dc3545; background-color: #fff5f5; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">🛡️ Sentinela Dashboard</span>
+            <span class="text-light" id="last-update">Atualizando...</span>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <h4 class="mb-3 text-secondary">Status da Infraestrutura</h4>
+        <div class="row" id="device-list">
+            <div class="col-12 text-center mt-5">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p>Carregando dados da API...</p>
+            </div>
+        </div>
+
+        <h4 class="mb-3 mt-5 text-secondary">Histórico Recente</h4>
+        <div class="card shadow-sm">
+            <div class="card-body p-0">
+                <table class="table table-striped mb-0">
+                    <thead>
+                        <tr>
+                            <th>Hora</th>
+                            <th>Dispositivo</th>
+                            <th>Status</th>
+                            <th>Latência</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function updateDashboard() {
+            try {
+                // 1. Pega o Histórico Completo
+                const response = await fetch('http://127.0.0.1:8000/history?limit=20');
+                const data = await response.json();
+
+                // 2. Filtra o status MAIS RECENTE de cada dispositivo
+                const latestStatus = {};
+                // Como a lista vem ordenada do mais recente, o primeiro que aparecer é o atual
+                data.forEach(log => {
+                    if (!latestStatus[log.device_name]) {
+                        latestStatus[log.device_name] = log;
+                    }
+                });
+
+                // 3. Renderiza os Cards (Status Atual)
+                const deviceList = document.getElementById('device-list');
+                deviceList.innerHTML = '';
+                
+                Object.values(latestStatus).forEach(device => {
+                    const isUp = device.is_up;
+                    const colorClass = isUp ? 'status-up' : 'status-down';
+                    const badge = isUp ? '<span class="badge bg-success">ONLINE</span>' : '<span class="badge bg-danger">OFFLINE</span>';
+                    const latency = device.latency_ms ? `${device.latency_ms}ms` : '--';
+
+                    const html = `
+                        <div class="col-md-4 mb-3">
+                            <div class="card shadow-sm ${colorClass} h-100">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h5 class="card-title mb-0">${device.device_name}</h5>
+                                        ${badge}
+                                    </div>
+                                    <p class="card-text text-muted small mb-1">${device.ip_address}</p>
+                                    <h3 class="mb-0">${latency}</h3>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    deviceList.innerHTML += html;
+                });
+
+                // 4. Renderiza a Tabela de Histórico
+                const historyTable = document.getElementById('history-table');
+                historyTable.innerHTML = '';
+                data.forEach(log => {
+                    const time = new Date(log.timestamp).toLocaleTimeString();
+                    const statusColor = log.is_up ? 'text-success' : 'text-danger fw-bold';
+                    const statusText = log.is_up ? 'Online' : 'FALHA';
+                    
+                    historyTable.innerHTML += `
+                        <tr>
+                            <td>${time}</td>
+                            <td>${log.device_name}</td>
+                            <td class="${statusColor}">${statusText}</td>
+                            <td>${log.latency_ms || '-'}</td>
+                        </tr>
+                    `;
+                });
+
+                document.getElementById('last-update').innerText = 'Última verificação: ' + new Date().toLocaleTimeString();
+
+            } catch (error) {
+                console.error("Erro ao buscar dados:", error);
+            }
+        }
+
+        // Atualiza a cada 10 segundos
+        setInterval(updateDashboard, 10000);
+        updateDashboard();
+    </script>
+</body>
+</html>
